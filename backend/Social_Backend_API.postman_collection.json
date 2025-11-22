@@ -1,0 +1,625 @@
+{
+	"info": {
+		"_postman_id": "social-backend-api-001",
+		"name": "Social Backend API",
+		"description": "Complete API collection for Social Media Backend with Activity Feed and Role-Based Permissions\n\n**Base URL:** http://localhost:5000\n\n**Authentication:** Uses HTTP-only cookies. After login/signup, cookies are automatically set. Include cookies in subsequent requests.\n\n**Roles:**\n- **user**: Regular user (default)\n- **admin**: Can delete users, posts, and likes\n- **owner**: Can do everything admin can do + create/delete admins",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Sign Up",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Cookie is automatically set by server",
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has success true\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"emailId\": \"user@example.com\",\n    \"username\": \"testuser\",\n    \"password\": \"Test123!@#\",\n    \"bio\": \"This is my bio\",\n    \"role\": \"user\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/signup",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"signup"
+							]
+						},
+						"description": "Create a new user account. Password must be at least 6 characters. Username must be 3-30 characters, alphanumeric + underscores only. Email must be unique.\n\n**Note:** Cookie is automatically set after successful signup."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Cookie is set\", function () {",
+									"    pm.expect(pm.cookies.has('token')).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"emailId\": \"user@example.com\",\n    \"password\": \"Test123!@#\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login with email and password. Rate limited to 3 attempts per minute.\n\n**Note:** Cookie is automatically set after successful login."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Auth",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/check-auth",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"check-auth"
+							]
+						},
+						"description": "Verify if the current user is authenticated. Requires valid token cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"profile"
+							]
+						},
+						"description": "Get the current authenticated user's profile."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Logout the current user. Clears the authentication cookie."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for user signup, login, logout, and profile management."
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user"
+								}
+							]
+						},
+						"description": "Get user profile by ID. Returns 403 if user is blocked or has blocked you."
+					},
+					"response": []
+				},
+				{
+					"name": "Follow User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id/follow",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id",
+								"follow"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user to follow"
+								}
+							]
+						},
+						"description": "Follow a user. Cannot follow yourself or blocked users. Creates activity log entry."
+					},
+					"response": []
+				},
+				{
+					"name": "Unfollow User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id/unfollow",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id",
+								"unfollow"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user to unfollow"
+								}
+							]
+						},
+						"description": "Unfollow a user. Creates activity log entry."
+					},
+					"response": []
+				},
+				{
+					"name": "Block User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id/block",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id",
+								"block"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user to block"
+								}
+							]
+						},
+						"description": "Block a user. This will:\n- Remove from following/followers if exists\n- Hide all posts from blocked user\n- Prevent interactions with blocked user"
+					},
+					"response": []
+				},
+				{
+					"name": "Unblock User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id/unblock",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id",
+								"unblock"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user to unblock"
+								}
+							]
+						},
+						"description": "Unblock a user. Posts will become visible again."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User (Admin/Owner Only)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user to delete"
+								}
+							]
+						},
+						"description": "Soft delete a user. Only Admin or Owner can delete users. Cannot delete yourself. Creates activity log entry."
+					},
+					"response": []
+				}
+			],
+			"description": "User management endpoints for viewing profiles, following, blocking, and deleting users."
+		},
+		{
+			"name": "Posts",
+			"item": [
+				{
+					"name": "Get All Posts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/getAll",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"posts",
+								"getAll"
+							]
+						},
+						"description": "Get all posts excluding posts from blocked users. Posts are sorted by newest first."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Post",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "content",
+									"value": "This is my post content",
+									"type": "text",
+									"description": "Post content (1-5000 characters)"
+								},
+								{
+									"key": "image",
+									"type": "file",
+									"src": [],
+									"description": "Optional image file (max 5MB, jpeg/jpg/png/gif/webp)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/upload",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"posts",
+								"upload"
+							]
+						},
+						"description": "Create a new post with optional image. Content is required (1-5000 characters). Image is optional but if provided, must be under 5MB. Image is uploaded to Cloudinary. Creates activity log entry."
+					},
+					"response": []
+				},
+				{
+					"name": "Like/Unlike Post",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/like/:postId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"posts",
+								"like",
+								":postId"
+							],
+							"variable": [
+								{
+									"key": "postId",
+									"value": "POST_ID_HERE",
+									"description": "MongoDB ObjectId of the post"
+								}
+							]
+						},
+						"description": "Like or unlike a post. If already liked, it will unlike. If not liked, it will like. Creates activity log entry."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Post",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/:postId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"posts",
+								":postId"
+							],
+							"variable": [
+								{
+									"key": "postId",
+									"value": "POST_ID_HERE",
+									"description": "MongoDB ObjectId of the post to delete"
+								}
+							]
+						},
+						"description": "Soft delete a post. Author can delete own posts. Admin/Owner can delete any post. Creates activity log entry with deletedByRole."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Like (Admin/Owner Only)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/:postId/like/:userId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"posts",
+								":postId",
+								"like",
+								":userId"
+							],
+							"variable": [
+								{
+									"key": "postId",
+									"value": "POST_ID_HERE",
+									"description": "MongoDB ObjectId of the post"
+								},
+								{
+									"key": "userId",
+									"value": "USER_ID_HERE",
+									"description": "MongoDB ObjectId of the user whose like to remove"
+								}
+							]
+						},
+						"description": "Remove a like from a post. Only Admin or Owner can use this endpoint."
+					},
+					"response": []
+				}
+			],
+			"description": "Post management endpoints for creating, viewing, liking, and deleting posts."
+		},
+		{
+			"name": "Activities",
+			"item": [
+				{
+					"name": "Get All Activities",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/activities/getAll",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"activities",
+								"getAll"
+							]
+						},
+						"description": "Get all activities for the activity wall. Returns formatted messages like:\n- 'ABC made a post'\n- 'DEF followed ABC'\n- 'PQR liked ABC's post'\n- 'Post deleted by Admin'\n- 'User deleted by Owner'\n\nActivities are sorted by newest first."
+					},
+					"response": []
+				}
+			],
+			"description": "Activity feed endpoints showing all network activities."
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Create Admin (Owner Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"emailId\": \"admin@example.com\",\n    \"username\": \"adminuser\",\n    \"password\": \"Admin123!@#\",\n    \"bio\": \"Admin bio\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"create"
+							]
+						},
+						"description": "Create a new admin user. Only Owner can create admins. Creates activity log entry."
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Admins (Owner Only)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/getAll",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"getAll"
+							]
+						},
+						"description": "Get all admin users. Only Owner can access this endpoint."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Admin (Owner Only)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/:adminId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								":adminId"
+							],
+							"variable": [
+								{
+									"key": "adminId",
+									"value": "ADMIN_ID_HERE",
+									"description": "MongoDB ObjectId of the admin to delete"
+								}
+							]
+						},
+						"description": "Soft delete an admin user. Only Owner can delete admins. Cannot delete yourself. Creates activity log entry."
+					},
+					"response": []
+				}
+			],
+			"description": "Admin management endpoints. Only Owner can access these endpoints."
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000",
+			"type": "string"
+		}
+	]
+}
+

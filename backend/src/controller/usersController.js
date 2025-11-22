@@ -37,16 +37,21 @@ const getById = async (req, res) => {
     }
 
     // Check if logged in user blocked this user or vice versa
-    if (loggedInUser.blockedUsers.includes(userId)) {
-      return res
-        .status(403)
-        .json({ success: false, message: "User not found" });
-    }
+    // Admins and Owners can bypass blocking restrictions for moderation purposes
+    const isAdminOrOwner = loggedInUser.role === "admin" || loggedInUser.role === "owner";
+    
+    if (!isAdminOrOwner) {
+      if (loggedInUser.blockedUsers.includes(userId)) {
+        return res
+          .status(403)
+          .json({ success: false, message: "User not found" });
+      }
 
-    if (user.blockedUsers.includes(loggedInUser._id.toString())) {
-      return res
-        .status(403)
-        .json({ success: false, message: "User not found" });
+      if (user.blockedUsers.includes(loggedInUser._id.toString())) {
+        return res
+          .status(403)
+          .json({ success: false, message: "User not found" });
+      }
     }
 
     res.status(200).json({
@@ -257,6 +262,37 @@ const unblockUser = async (req, res) => {
   }
 };
 
+const getBlockedUsers = async (req, res) => {
+  try {
+    const loggedInUser = req.result;
+
+    if (!loggedInUser.blockedUsers || loggedInUser.blockedUsers.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No blocked users",
+        blockedUsers: [],
+      });
+    }
+
+    // Fetch blocked users' basic info (bypassing blocking restrictions)
+    const blockedUsers = await User.find({
+      _id: { $in: loggedInUser.blockedUsers },
+      deletedAt: null, // Only get non-deleted users
+    })
+      .select("username emailId profilePicture bio _id")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      message: "Blocked users fetched successfully",
+      blockedUsers: blockedUsers,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+    console.log("Error Occures while fetching blocked users : ", err.message);
+  }
+};
+
 const deleteUser = async (req, res) => {
   try {
     const loggedInUser = req.result; // From userMiddleware (should be Admin or Owner)
@@ -287,20 +323,28 @@ const deleteUser = async (req, res) => {
       });
     }
 
-    // Check if user is already deleted
-    if (userToDelete.deletedAt) {
-      return res.status(400).json({
-        success: false,
-        message: "User is already deleted",
-      });
+    // Role-based deletion restrictions:
+    // - Admins can only delete regular users (not owners or other admins)
+    // - Owners can delete anyone (users, admins, but not themselves - already checked above)
+    if (loggedInUser.role === "admin") {
+      if (userToDelete.role === "owner") {
+        return res.status(403).json({
+          success: false,
+          message: "Admins cannot delete owners",
+        });
+      }
+      if (userToDelete.role === "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Admins cannot delete other admins. Only owners can delete admins.",
+        });
+      }
     }
 
-    // Soft delete the user
-    userToDelete.deletedAt = new Date();
-    userToDelete.deletedBy = loggedInUser._id;
-    await userToDelete.save();
+    // Store username for activity log before deletion
+    const deletedUsername = userToDelete.username;
 
-    // Create activity entry
+    // Create activity entry BEFORE deletion (so we have audit trail)
     await Activity.create({
       actor: loggedInUser._id,
       actorUsername: loggedInUser.username,
@@ -308,19 +352,113 @@ const deleteUser = async (req, res) => {
       target: userToDelete._id,
       targetModel: "User",
       metadata: {
-        targetUsername: userToDelete.username,
+        targetUsername: deletedUsername,
       },
     });
 
+    // Clean up: Remove user from other users' followers arrays
+    await User.updateMany(
+      { followers: userIdToDelete },
+      { $pull: { followers: userIdToDelete } }
+    );
+
+    // Clean up: Remove user from other users' following arrays
+    await User.updateMany(
+      { following: userIdToDelete },
+      { $pull: { following: userIdToDelete } }
+    );
+
+    // Clean up: Remove user from other users' blockedUsers arrays
+    await User.updateMany(
+      { blockedUsers: userIdToDelete },
+      { $pull: { blockedUsers: userIdToDelete } }
+    );
+
+    // Hard delete all posts by this user
+    await Post.deleteMany({ author: userIdToDelete });
+
+    // Hard delete the user from database (frees up username and email)
+    await User.findByIdAndDelete(userIdToDelete);
+
     res.status(200).json({
       success: true,
-      message: `User ${userToDelete.username} deleted successfully`,
+      message: `User ${deletedUsername} deleted successfully`,
     });
   } catch (error) {
     console.log("Error in deleteUser:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete user",
+      error: error.message,
+    });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const loggedInUser = req.result; // From userMiddleware
+    const { bio, profilePicture } = req.body;
+    let imageUrl = null;
+
+    // Upload new profile picture to Cloudinary if provided
+    if (req.file) {
+      const uploadOnCloudinary = require("../config/cloudinary");
+      try {
+        imageUrl = await uploadOnCloudinary(req.file.path);
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload profile picture",
+          error: error.message,
+        });
+      }
+    }
+
+    // Update user profile
+    const updateData = {};
+    
+    if (bio !== undefined) {
+      // Validate bio length
+      if (bio.length > 200) {
+        return res.status(400).json({
+          success: false,
+          message: "Bio cannot exceed 200 characters",
+        });
+      }
+      updateData.bio = bio;
+    }
+
+    if (imageUrl) {
+      updateData.profilePicture = imageUrl;
+    } else if (profilePicture !== undefined) {
+      // Allow direct URL update if no file upload
+      updateData.profilePicture = profilePicture;
+    }
+
+    // Update the user
+    const updatedUser = await User.findByIdAndUpdate(
+      loggedInUser._id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.log("Error in updateProfile:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
       error: error.message,
     });
   }
@@ -333,5 +471,7 @@ module.exports = {
   unfollowUser,
   blockUser,
   unblockUser,
+  getBlockedUsers,
   deleteUser,
+  updateProfile,
 };

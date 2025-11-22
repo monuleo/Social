@@ -10,8 +10,16 @@ const {
   unfollowUser,
   blockUser,
   unblockUser,
+  getBlockedUsers,
   deleteUser,
 } = require("../controller/usersController");
+const { getUserPosts } = require("../controller/postController");
+
+// Get blocked users list (must be before /:id route to avoid conflict)
+profileRouter.get("/blocked", userMiddleware, getBlockedUsers);
+
+// Get user's posts (must be before /:id route to avoid conflict)
+profileRouter.get("/:id/posts", userMiddleware, getUserPosts);
 
 profileRouter.get("/:id", userMiddleware, getById);
 profileRouter.post("/:id/follow", userMiddleware, followUser);

@@ -193,17 +193,28 @@ const getAllPosts = async (req, res) => {
     // Filter out posts from blocked users
     // If user A blocks user B, B should not see A's posts
     // If user A blocks user B, A should not see B's posts
+    // Exception: Admins and Owners can see all posts for moderation purposes
+    const isAdminOrOwner = loggedInUser.role === "admin" || loggedInUser.role === "owner";
+    
     const filteredPosts = posts.filter((post) => {
+      // Skip posts with deleted/null authors
+      if (!post.author || !post.author._id) {
+        return false;
+      }
+
       const authorId = post.author._id.toString();
 
       // Check if current user has blocked the post author
-      if (loggedInUser.blockedUsers.includes(authorId)) {
+      if (loggedInUser.blockedUsers && loggedInUser.blockedUsers.includes(authorId)) {
         return false;
       }
 
       // Check if post author has blocked the current user
+      // Admins and Owners can bypass this check to see all posts for moderation
       if (
+        !isAdminOrOwner &&
         post.author.blockedUsers &&
+        Array.isArray(post.author.blockedUsers) &&
         post.author.blockedUsers.includes(loggedInUser._id.toString())
       ) {
         return false;
@@ -405,10 +416,78 @@ const deleteLike = async (req, res) => {
   }
 };
 
+// Get all posts by a specific user
+const getUserPosts = async (req, res) => {
+  try {
+    const loggedInUser = req.result; // From userMiddleware
+    const userId = req.params.id;
+
+    // Validate userId
+    if (!require("mongoose").Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid User ID",
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if logged in user blocked this user or vice versa
+    // Admins and Owners can see all posts for moderation
+    const isAdminOrOwner = loggedInUser.role === "admin" || loggedInUser.role === "owner";
+    
+    if (!isAdminOrOwner) {
+      if (loggedInUser.blockedUsers.includes(userId)) {
+        return res.status(403).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      if (user.blockedUsers.includes(loggedInUser._id.toString())) {
+        return res.status(403).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+    }
+
+    // Get all posts by this user (exclude deleted posts)
+    const posts = await Post.find({ 
+      author: userId,
+      deletedAt: null 
+    })
+      .populate("author", "username profilePicture")
+      .sort({ createdAt: -1 }); // Newest first
+
+    res.status(200).json({
+      success: true,
+      message: "User posts fetched successfully",
+      posts: posts,
+      count: posts.length,
+    });
+  } catch (error) {
+    console.log("Error in getUserPosts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user posts",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   uploadPost,
   likePost,
   getAllPosts,
   deletePost,
   deleteLike,
+  getUserPosts,
 };

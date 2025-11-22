@@ -1,5 +1,6 @@
 const User = require("../models/User.model");
 const Activity = require("../models/Activity");
+const Post = require("../models/Post");
 const bcrypt = require("bcrypt");
 const validate = require("../utils/validator");
 
@@ -118,23 +119,10 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    // Check if admin is already deleted
-    if (adminToDelete.deletedAt) {
-      return res.status(400).json({
-        success: false,
-        message: "Admin is already deleted",
-      });
-    }
+    // Store username for activity log before deletion
+    const deletedAdminUsername = adminToDelete.username;
 
-    // Soft delete the admin (change role to user and mark as deleted)
-    // Or we can just soft delete like regular users
-    adminToDelete.deletedAt = new Date();
-    adminToDelete.deletedBy = loggedInUser._id;
-    // Optionally, we can change role back to user
-    // adminToDelete.role = "user";
-    await adminToDelete.save();
-
-    // Create activity entry
+    // Create activity entry BEFORE deletion (so we have audit trail)
     await Activity.create({
       actor: loggedInUser._id,
       actorUsername: loggedInUser.username,
@@ -142,13 +130,37 @@ const deleteAdmin = async (req, res) => {
       target: adminToDelete._id,
       targetModel: "User",
       metadata: {
-        targetUsername: adminToDelete.username,
+        targetUsername: deletedAdminUsername,
       },
     });
 
+    // Clean up: Remove admin from other users' followers arrays
+    await User.updateMany(
+      { followers: adminId },
+      { $pull: { followers: adminId } }
+    );
+
+    // Clean up: Remove admin from other users' following arrays
+    await User.updateMany(
+      { following: adminId },
+      { $pull: { following: adminId } }
+    );
+
+    // Clean up: Remove admin from other users' blockedUsers arrays
+    await User.updateMany(
+      { blockedUsers: adminId },
+      { $pull: { blockedUsers: adminId } }
+    );
+
+    // Hard delete all posts by this admin
+    await Post.deleteMany({ author: adminId });
+
+    // Hard delete the admin from database (frees up username and email)
+    await User.findByIdAndDelete(adminId);
+
     res.status(200).json({
       success: true,
-      message: `Admin ${adminToDelete.username} deleted successfully`,
+      message: `Admin ${deletedAdminUsername} deleted successfully`,
     });
   } catch (error) {
     console.log("Error in deleteAdmin:", error);
@@ -187,8 +199,66 @@ const getAllAdmins = async (req, res) => {
   }
 };
 
+// Get all users (Admin/Owner only)
+const getAllUsers = async (req, res) => {
+  try {
+    const loggedInUser = req.result; // From userMiddleware (should be Admin or Owner)
+
+    // Get all users (not deleted) with post count
+    const users = await User.find({
+      deletedAt: null,
+    })
+      .select("-password")
+      .lean();
+
+    // Get post counts for each user
+    const userIds = users.map((user) => user._id);
+    const postCounts = await Post.aggregate([
+      {
+        $match: {
+          author: { $in: userIds },
+          deletedAt: null,
+        },
+      },
+      {
+        $group: {
+          _id: "$author",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Create a map of user ID to post count
+    const postCountMap = {};
+    postCounts.forEach((item) => {
+      postCountMap[item._id.toString()] = item.count;
+    });
+
+    // Add post count to each user
+    const usersWithPostCount = users.map((user) => ({
+      ...user,
+      postCount: postCountMap[user._id.toString()] || 0,
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Users fetched successfully",
+      users: usersWithPostCount,
+      count: usersWithPostCount.length,
+    });
+  } catch (error) {
+    console.log("Error in getAllUsers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createAdmin,
   deleteAdmin,
   getAllAdmins,
+  getAllUsers,
 };

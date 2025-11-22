@@ -1,5 +1,6 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const cors = require("cors");
 
 const { connectDB } = require("./config/db");
 require("dotenv").config();
@@ -12,6 +13,17 @@ const adminRouter = require("./router/adminRouter");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// CORS configuration
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Frontend URL
+    credentials: true, // Allow cookies
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(cookieParser());
 app.use(express.json());
 

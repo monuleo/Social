@@ -10,6 +10,7 @@ const {
   getAllPosts,
   deletePost,
   deleteLike,
+  getUserPosts,
 } = require("../controller/postController");
 
 // Get all posts (excluding blocked users)
