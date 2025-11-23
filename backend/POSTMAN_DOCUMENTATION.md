@@ -44,20 +44,34 @@ This API uses **HTTP-only cookies** for authentication. After successful login o
 | POST | `/api/auth/login` | Login user | ❌ |
 | GET | `/api/auth/check-auth` | Verify authentication | ✅ |
 | GET | `/api/auth/profile` | Get current user profile | ✅ |
+| PUT | `/api/auth/profile` | Update user profile (bio, profile picture) | ✅ |
 | POST | `/api/auth/logout` | Logout user | ✅ |
 
 **Login Rate Limit:** 3 attempts per minute
+
+**Update Profile:**
+- Use `form-data` with fields:
+  - `bio`: Optional (string)
+  - `profilePicture`: Optional (image file, max 5MB)
+- If only updating bio, send JSON body with `{ "bio": "New bio text" }`
 
 ### 2. Users (`/api/users`)
 
 | Method | Endpoint | Description | Auth Required | Role Required |
 |--------|----------|-------------|---------------|--------------|
+| GET | `/api/users/blocked` | Get list of blocked users | ✅ | - |
 | GET | `/api/users/:id` | Get user by ID | ✅ | - |
+| GET | `/api/users/:id/posts` | Get all posts by a specific user | ✅ | - |
 | POST | `/api/users/:id/follow` | Follow a user | ✅ | - |
 | DELETE | `/api/users/:id/unfollow` | Unfollow a user | ✅ | - |
 | POST | `/api/users/:id/block` | Block a user | ✅ | - |
 | DELETE | `/api/users/:id/unblock` | Unblock a user | ✅ | - |
 | DELETE | `/api/users/:id` | Delete user | ✅ | Admin/Owner |
+
+**Notes:**
+- `GET /api/users/:id` - Admins/Owners can view blocked users for moderation
+- `GET /api/users/:id/posts` - Returns posts filtered by blocking rules
+- `GET /api/users/blocked` - Returns list of users you have blocked with their details
 
 ### 3. Posts (`/api/posts`)
 
@@ -93,7 +107,12 @@ This API uses **HTTP-only cookies** for authentication. After successful login o
 |--------|----------|-------------|---------------|--------------|
 | POST | `/api/admin/create` | Create admin | ✅ | Owner |
 | GET | `/api/admin/getAll` | Get all admins | ✅ | Owner |
+| GET | `/api/admin/users` | Get all users with post counts | ✅ | Admin/Owner |
 | DELETE | `/api/admin/:adminId` | Delete admin | ✅ | Owner |
+
+**Notes:**
+- `GET /api/admin/users` - Returns all users with their post counts for admin panel
+- Admin users can access `/api/admin/users` but cannot create/delete admins
 
 ## 🎭 User Roles
 
@@ -151,28 +170,47 @@ This API uses **HTTP-only cookies** for authentication. After successful login o
 - `content`: "This is my post content"
 - `image`: [Select file] (optional)
 
+### Update Profile (Form Data)
+- `bio`: "Updated bio text" (optional)
+- `profilePicture`: [Select file] (optional, max 5MB)
+
+**OR** (JSON body for bio only):
+```json
+{
+    "bio": "Updated bio text"
+}
+```
+
 ## ✅ Testing Workflow
+
+### Basic User Flow
 
 1. **Sign Up** → Creates account and sets cookie
 2. **Login** → Sets authentication cookie
 3. **Get Profile** → Verify authentication works
-4. **Upload Post** → Create a test post
-5. **Get All Posts** → See your post in feed
-6. **Like Post** → Like a post (use postId from previous response)
-7. **Follow User** → Follow another user (use userId)
-8. **Get All Activities** → See activity wall with formatted messages
-9. **Block User** → Block a user
-10. **Get All Posts** → Verify blocked user's posts are hidden
+4. **Update Profile** → Update bio or profile picture
+5. **Upload Post** → Create a test post
+6. **Get All Posts** → See your post in feed
+7. **Like Post** → Like a post (use postId from previous response)
+8. **Follow User** → Follow another user (use userId)
+9. **Get User Posts** → Get all posts by a specific user (`GET /api/users/:id/posts`)
+10. **Get All Activities** → See activity wall with formatted messages
+11. **Block User** → Block a user
+12. **Get Blocked Users** → View list of blocked users (`GET /api/users/blocked`)
+13. **Get All Posts** → Verify blocked user's posts are hidden
+14. **Unblock User** → Unblock a user
 
 ### Testing Admin/Owner Features
 
 1. **Create Owner Account** (manually set role in database or signup with role: "owner")
 2. **Login as Owner**
-3. **Create Admin** → Create an admin user
-4. **Get All Admins** → List all admins
-5. **Delete User** → Delete a user (requires admin/owner)
-6. **Delete Post** → Delete any post (requires admin/owner or be author)
-7. **Delete Like** → Remove a like from a post (requires admin/owner)
+3. **Get All Users** → View all users with post counts (`GET /api/admin/users`)
+4. **Create Admin** → Create an admin user
+5. **Get All Admins** → List all admins
+6. **Delete User** → Delete a user (requires admin/owner)
+7. **Delete Post** → Delete any post (requires admin/owner or be author)
+8. **Delete Like** → Remove a like from a post (requires admin/owner)
+9. **Delete Admin** → Delete an admin (Owner only)
 
 ## 🔍 Response Format
 
@@ -192,6 +230,84 @@ All responses follow this format:
 {
     "success": false,
     "message": "Error message"
+}
+```
+
+## 📄 Example Responses
+
+### Get Blocked Users (`GET /api/users/blocked`)
+```json
+{
+    "success": true,
+    "message": "Blocked users fetched successfully",
+    "blockedUsers": [
+        {
+            "_id": "507f1f77bcf86cd799439011",
+            "username": "blockeduser",
+            "emailId": "blocked@example.com",
+            "profilePicture": "https://cloudinary.com/image.jpg",
+            "bio": "User bio"
+        }
+    ]
+}
+```
+
+### Get User Posts (`GET /api/users/:id/posts`)
+```json
+{
+    "success": true,
+    "message": "User posts fetched successfully",
+    "posts": [
+        {
+            "_id": "507f1f77bcf86cd799439012",
+            "content": "Post content",
+            "image": "https://cloudinary.com/image.jpg",
+            "likes": ["507f1f77bcf86cd799439011"],
+            "likesCount": 1,
+            "author": {
+                "_id": "507f1f77bcf86cd799439010",
+                "username": "authoruser",
+                "profilePicture": "https://cloudinary.com/image.jpg"
+            },
+            "createdAt": "2024-01-15T10:30:00.000Z"
+        }
+    ],
+    "count": 1
+}
+```
+
+### Get All Users for Admin (`GET /api/admin/users`)
+```json
+{
+    "success": true,
+    "message": "Users fetched successfully",
+    "users": [
+        {
+            "_id": "507f1f77bcf86cd799439010",
+            "username": "testuser",
+            "emailId": "user@example.com",
+            "role": "user",
+            "postCount": 5,
+            "createdAt": "2024-01-10T10:30:00.000Z"
+        }
+    ],
+    "count": 1
+}
+```
+
+### Update Profile (`PUT /api/auth/profile`)
+```json
+{
+    "success": true,
+    "message": "Profile updated successfully",
+    "user": {
+        "_id": "507f1f77bcf86cd799439010",
+        "username": "testuser",
+        "emailId": "user@example.com",
+        "bio": "Updated bio",
+        "profilePicture": "https://cloudinary.com/image.jpg",
+        "role": "user"
+    }
 }
 ```
 
@@ -220,9 +336,12 @@ All responses follow this format:
 - All timestamps are in ISO 8601 format
 - User IDs and Post IDs are MongoDB ObjectIds
 - Posts from blocked users are automatically filtered
-- Soft delete is used (deleted items are marked, not removed)
+- **Hard delete is used** - When admins/owners delete users or admins, they are permanently removed from the database (not soft deleted)
+- Posts from deleted users are also hard deleted
 - Activity wall shows all activities in the network
 - Rate limiting: 3 login attempts per minute
+- Admins and Owners can bypass blocking restrictions when viewing user profiles for moderation purposes
+- Blocking works both ways - if User A blocks User B, neither can see the other's posts
 
 ## 🔗 Environment Variables
 
